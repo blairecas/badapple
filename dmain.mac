@@ -240,15 +240,15 @@ PpuStart:
 	clr	(R0)+				; vaddr still not needed
 	mov	R0, (R0)
 	add	#2, (R0)+			; +0 means next line is 2-word descriptor
-	; 16.+32. empty lines
-	mov	#16.+32., R3
+	; 16.+24. empty lines
+	mov	#16.+24., R3
 10$:	mov	#C_ELINE/2, (R0)+
 	mov	R0, (R0)
 	add	#2, (R0)+
 	sob	R3, 10$
-	; 224. main lines
+	; 240. main lines
 	mov	#C_VADDR/2, R1			; vaddr to normal ram 100000..
-	mov	#56., R3
+	mov	#60., R3
 20$:	mov	R1, (R0)+			; put vaddr
 	mov	R0, (R0)			; put next element addr
 	add	#2, (R0)+
@@ -266,8 +266,8 @@ PpuStart:
 	add	#2, (R0)+
 	add	#C_SCRWID/2, R1			; advance vaddr
 	sob	R3, 20$
-	; 32. footer empty lines
-	mov	#32., R3
+	; 24. footer empty lines
+	mov	#24., R3
 30$:	mov	#C_ELINE/2, (R0)+
 	mov	R0, (R0)
 	add	#2, (R0)+

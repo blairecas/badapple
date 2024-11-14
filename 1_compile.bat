@@ -28,12 +28,12 @@ echo Make data and DSK
 echo ===========================================================================
 php -f ./scripts/make_data.php
 if %ERRORLEVEL% NEQ 0 ( exit /b )
-copy /b dmain.bin+data.bin BAPPMZ.DSK >NUL
+copy /b dmain.bin+data.bin bappmz.dsk >NUL
 
 del dmain.bin
 del data.bin
 del _dmain.mac
-rem del _dmain.lst
+del _dmain.lst
 
 echo.
 start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\badapple\BAPPMZ.DSK /boot1

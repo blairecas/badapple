@@ -114,7 +114,7 @@ function compareScreens ()
     $arr = Array();
     $len_same = 0;
     $arr_diff = Array();
-    for ($pos=C_WIDTH; $pos<(C_MAXPOS-C_WIDTH); $pos++) 
+    for ($pos=0; $pos<C_MAXPOS; $pos++) 
     {
         if (!isset($arr_prev[$pos])) $b1 = 0x00; else $b1 = $arr_prev[$pos];
         $b2 = $arr_curr[$pos];
