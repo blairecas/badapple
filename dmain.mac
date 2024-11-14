@@ -17,7 +17,7 @@ PPArr:	.byte	0				; 23334 return value (0 - OK)
 PPCmd:	.byte	10				; 23335 command (10 - read)
 PPDev:	.word	0				; 23336 device type (0x-FD, 32-ppu mem)
 PPApp:	.word	1000				; 23340 argument(s) (PPU addr for mem operations)
-PPAcp:	.word	1000				; 23342 address for CPU
+PPAcp:	.word	1000				; 23342 CPU addr (length in words for mem allocate)
 PPLen:	.word	End-1000/2			; 23344 length in words
 ; PPCmd: 10 - read, 20 - write, 30 - format
 ; PPDev: word [FD#, bit7 = 0 - bottom side] [0x - FD, 01 - one side only]
@@ -63,10 +63,11 @@ Main:	mov	R0, PpuFdN			; put FD# for later use in PPU
 	; start PPU code
 	mov	#32, PPDev			; device is PPU memory
 	movb	#1, PPCmd			; command - allocate
-	mov	#End-PpuStart/2, PPLen		; length in words
+	mov	#End-PpuStart/2, PPAcp		; length in words (for allocate it must be here, not in PPLen!)
 	call	PPSen
 	movb	#20, PPCmd			; command - write to
-	mov 	#PpuStart, PPAcp
+	mov 	#PpuStart, PPAcp		; mem addr in CPU
+	mov	#End-PpuStart/2, PPLen
 	call	PPSen
 	movb	#30, PPCmd			; command - run code
 	call	PPSen

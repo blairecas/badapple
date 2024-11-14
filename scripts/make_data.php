@@ -155,6 +155,7 @@ function writeArr ($g, $arr)
     
     $num_fram = 0;
     $cnt_diff = 0;
+    $exa_diff = 0;
     $max_diff = 0;
     $min_diff = PHP_INT_MAX;
 
@@ -195,6 +196,7 @@ function writeArr ($g, $arr)
         // stats
         if ($d < $min_diff) $min_diff = $d;
         if ($d > $max_diff) $max_diff = $d;
+	$exa_diff += $d;
         $cnt_diff = $cnt_diff + $d + $kali;
         $num_fram++;
         // write differences
@@ -207,4 +209,4 @@ function writeArr ($g, $arr)
     for ($i=0; $i<$max_size-$cnt_diff; $i++) fwrite($g, chr(0x00));
     fclose($g);
 
-    echo "\nFrames: $num_fram, Diff: $cnt_diff, Avg: ".($cnt_diff/$num_fram).", Min: $min_diff, Max: $max_diff\n";
+    echo "\nFrames: $num_fram, Diff: $exa_diff, Avg: ".number_format($exa_diff/$num_fram, 2).", Min: $min_diff, Max: $max_diff\n";
