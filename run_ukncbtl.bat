@@ -1,0 +1,1 @@
+start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\badapple\BAPPMZ.DSK /boot1

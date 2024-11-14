@@ -1,0 +1,8 @@
+*.lst
+*.obj
+*.log
+_*.*
+music/
+data/png/*.*
+system.dsk
+rt11.exe
