@@ -4,5 +4,8 @@
 _*.*
 music/
 data/png/*.*
+data/pngw/*.*
+data/bad_apple.aac
+data/bad_apple.wav
 system.dsk
 rt11.exe

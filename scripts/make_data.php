@@ -159,7 +159,7 @@ function writeArr ($g, $arr)
     $max_diff = 0;
     $min_diff = PHP_INT_MAX;
 
-    $dmain_size = filesize('dmain.bin');
+    $dmain_size = filesize('bappmz.bin');
     $max_size = 819200 - $dmain_size;
 
     $track_num = 1;

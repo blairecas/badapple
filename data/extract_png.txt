@@ -1,3 +1,8 @@
----
+--- extract images for floppy version
 C:\Dist\Graphics\ffmpeg\ffmpeg -i bad_apple.mp4 -vf "fps=24,scale=80:60" png/out%04d.png
----
+
+--- extract images for HDD version
+C:\Dist\Graphics\ffmpeg\ffmpeg -i bad_apple.mp4 -vf "fps=25,scale=320:240" pngw/out%04d.png
+
+--- extract audio for HDD version
+C:\Dist\Graphics\ffmpeg\ffmpeg -i bad_apple.mp4 -vn -acodec copy bad_apple.aac
