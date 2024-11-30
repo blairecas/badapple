@@ -21,7 +21,7 @@ if %ERRORLEVEL% NEQ 0 ( exit /b )
 rem del _bappwd.bin
 rem del _testwd.bin
 del _testwd.mac
-del _testwd.lst
+rem del _testwd.lst
 
 cd emulator
 ukncbtl

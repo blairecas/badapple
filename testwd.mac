@@ -1,5 +1,5 @@
 	.title	TESTWD
-	.enabl	LC
+	.enabl	LC, AMA
 
 C_SCRWID  = 50
 C_SCRSIZE = 240.*C_SCRWID
@@ -59,6 +59,13 @@ PPSen:	mov	#PPMsg, R2
 
 PpuStart:
 	mtps	#200
+	mov	#500, R0
+	clr	(R0)+
+	clr	(R0)+
+	clr	(R0)+
+	mov	#506, (R0)
+	mov	#506, @#272			; prevent screen showing trash
+	; setup memory on addrs 100000+
 	bic	#1, @#177054			; allow 100000-117777 window
 	bis	#^B11100000, @#177054		; allow RAM on addrs 120000+
 	; read sectors from 3rd ... our main code is there
@@ -92,24 +99,13 @@ BootEnd:
 	.asect
 	.=1000
 
-	; clear screen
-	call	ClearScreen
 	; clear high addrs
 	mov	#End, R0
 	mov	#100000-End/2, R1
 	clr	(R0)+
 	sob	R1, .-2
-	; clear low addrs
-	clr	R0
-	mov	#2, (R0)+
-	clr	(R0)+
-	mov	#500-4/4, R3
-10$:	clr	(R0)+
-	mov	#200, (R0)+
-	sob	R3, 10$
-	mov	#1000-500/2, R3
-	clr	(R0)+
-	sob	R3, .-2
+	; clear screen
+	call	ClearScreen
 	; setup screens
 	mov	#C_VTAB_O, R0
 	mov	#C_VADDR_O, R1
@@ -119,17 +115,42 @@ BootEnd:
 	call	SetVLines			; returns R0 - 'addr' for @#272
 	clr	@#270
 	mov	R0, @#272
+	; clear low addrs except 0272
+	clr	R0
+	mov	#2, (R0)+
+	clr	(R0)+
+	mov	#500-4/4, R3
+10$:	clr	(R0)+
+	cmp	R0, #272
+	bne	20$
+	tst	(R0)+
+	br	30$
+20$:	mov	#200, (R0)+
+30$:	sob	R3, 10$
+	mov	#1000-500/2, R3
+	clr	(R0)+
+	sob	R3, .-2
 
 	; vsync, keyboard, lpt
 	mov	#VsyInt, @#100	
 	bic	#^B0100000000, @#177054		; allow vsync in PPU
-	mov	#KeyInt,  @#300
+	mov	#KeyInt, @#300
 	clr	@#302				; (!) need for reentry into key int
 	bis	#100, @#177700			; allow keyboard int
 	mov	#177, @#177103			; all LPT ports to output
 
 	; all is set then, go
 	mtps	#0
+
+	; check for new covox on 177372
+	mov	#PpInt4, @#4
+	clr	R0
+	mov	#^xFF, @CovoxPort		; test new covox port
+	tst	R0
+	beq	40$
+	mov	#177100, CovoxPort		; audio port - LPT A
+40$:	clr	@#4
+
 
 ; rendering video from start
 Render:	call	ClearScreen
@@ -147,17 +168,7 @@ Render:	call	ClearScreen
 	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
 	call	WaitVsync
 
-	; check for new covox on 177372
-	mov	@#4, -(SP)
-	mov	#PpInt4, @#4
-	mov	#177372, R3			; new covox port
-	clr	R0
-	mov	#^x80, (R3)
-	tst	R0
-	beq	10$
-	mov	#177100, R3			; audio port - LPT A
-10$:	mov	(SP)+, @#4
-
+	mov	CovoxPort, R3
 	; R3 - audio port
 	; R4 - IDE control port
 	; R5 - IDE data port
@@ -237,6 +248,7 @@ Sector:	bit	#^B1000, (R4)			; 68T
 ; // Data, utils
 ; //////////////////////////////////////////////////////////////////////////////
 
+CovoxPort:	.word	177372			; new covox addr
 CurTrack:	.word	0
 
 ; int 4 for testing registers
@@ -264,17 +276,12 @@ WaitVsync:
 	clr	VsyCnt
 	return
 
-; clear all planes
+; clear both screens data
 ClearScreen:
-	mov	#177010, R4
-	mov	#177012, R2
-	mov	#177014, R5
-	mov	#481.*C_SCRWID, R3
-	mov	#C_ELINE, (R4)
-10$:	clr	(R5)
-	clr	(R2)
-	inc	(R4)
-	sob	R3, 10$
+	mov	#C_ELINE, R0
+	mov	#481.*20., R3
+	clr	(R0)+
+	sob	R3, .-2
 	return
 
 ; setup vlines table
@@ -315,84 +322,6 @@ SetVLines:
 	sob	R3, 30$
 	; return addr to lines table in R0
 	mov	(SP)+, R0
-	return
-
-; fatal error
-Error:	mtps	#200
-	br	.
-
-; type number and advance 'cursor'
-TypeN:	mov	PC, R1
-	add	#MsgNum-., R1
-	call	PutOctal
-	mov	PC, R0
-	add	#MsgNum-., R0
-	mov	CurVaddr, R1
-	call	PpuPriStr
-	add	#8., CurVaddr
-	inc	CurCol
-	cmp	CurCol, #10.
-	bne	99$
-	clr	CurCol
-	add	#10.*C_SCRWID, CurVaddr
-	inc	CurRow	
-99$:	return
-
-CurVaddr:	.word	0
-CurCol:		.word	0
-CurRow:		.word	0
-MsgNum:		.asciz	"000000  "
-		.even
-
-; put octal number in R0 to (R1)+
-PutOctal:
-	mov	R2, -(SP)
-	mov	R3, -(SP)
-	mov	#6, R3
-	clr	R2
-	br	20$
-10$:	clr	R2
-	rol	R0
-	rol	R2
-	rol	R0
-	rol	R2
-20$:	rol	R0
-	rol	R2
-	add	#'0, R2
-	movb	R2, (R1)+
-	sob	R3, 10$
-	mov	(SP)+, R3
-	mov	(SP)+, R2
-	return
-
-C_FONT_ADDR	= 117430
-C_FONT_DY	= 11.
-
-; 117430 - addr of 0x00 character in ROM, font is 11. bytes per character, KOI8R
-; R0 - string addr, R1 - vaddr
-PpuPriStr:
-	mov	R2, -(SP)
-	mov	R4, -(SP)
-	mov	R5, -(SP)
-	mov	#177010, R4
-	mov	#177014, R5
-	mov	R1, (R4)
-	mov	#C_SCRWID, R2
-10$:	movb	(R0)+, R1
-	beq	20$
-	bic	#^B1111111100000000, R1
-	mul	#C_FONT_DY, R1
-	add	#C_FONT_ADDR, R1
-	.rept	C_FONT_DY
-	movb	(R1)+, (R5)
-	add	R2, (R4)
-	.endr
-	sub	#C_FONT_DY*C_SCRWID-1, (R4)
-	br	10$
-20$:	mov	(R4), R1
-	mov	(SP)+, R5
-	mov	(SP)+, R4
-	mov	(SP)+, R2
 	return
 
 End:

@@ -33,7 +33,7 @@ Boot:	nop					; needed for loading with RS-232
 	mov	#176570, R4
 	mov	#176572, R5
 	mov	#1000, R1
-	; get length in R3
+	; get length MSB (bytes) -> R3
 	clr	R3
 	tstb	(R4)
 	bpl	.-2
@@ -70,7 +70,7 @@ Start:	; print message that we are loaded main code
 	call	PriStr
 	; clean up low addrs
 	call	ClearL
-	; select cassette #
+	; select cartridge #
 	.print	#MsgSel
 Selca:	call	GetKey
 	cmpb	R0, #15
@@ -143,9 +143,12 @@ Write:	call	PriChr
 	; send code 102 (write)
 	mov	#102, R0
 	call	SenByt
-	; get length in 1k-units
+	; get length in sectors (3-byte MSB)
 	mov	#176570, R4
 	mov	#176572, R5
+	tstb	(R4)
+	bpl	.-2
+	movb	(R5), R2			; 0-127 is enough
 	clr	R3
 	tstb	(R4)
 	bpl	.-2
@@ -154,13 +157,13 @@ Write:	call	PriChr
 	tstb	(R4)
 	bpl	.-2
 	bisb	(R5), R3
-10$:	mov	#2, R0
-12$:	; get RS232 data
-	mov	#End, R2
+	; now length in sectors in R2:R3
+10$:	; get RS232 data
+	mov	#End, R0
 	mov	#512., R1
 20$:	tstb	(R4)
 	bpl	.-2
-	movb	(R5), (R2)+
+	movb	(R5), (R0)+
 	sob	R1, 20$
 	; ask PPU to put sector
 	; TODO: use 2 buffers and do not wait here
@@ -168,8 +171,9 @@ Write:	call	PriChr
 	call	PpuWai
 	call	AckSen
 	call	IncSec
-	sob	R0, 12$
 	sob	R3, 10$
+	dec	R2
+	bpl	10$
 	br	Done
 
 ; read sectors from HDD and send them by RS-232
@@ -179,16 +183,20 @@ Read1:	call	PriChr
 	; send code 101 (read)
 	mov	#101, R0
 	call	SenByt
-	; send length
+	; send length 3-byte MSB R2:R3
+	clr	R2
+	tstb	(R4)
+	bpl	.-2
+	movb	R2, (R5)
 	mov	#2., R3
-	tstb	(R4)
-	bpl	.-2
-	movb	R3, (R5)
 	swab	R3
 	tstb	(R4)
 	bpl	.-2
 	movb	R3, (R5)
 	swab	R3
+	tstb	(R4)
+	bpl	.-2
+	movb	R3, (R5)
 10$:	; ask PPU to get sector
 	mov	#2, PpuCom
 	call	PpuWai
@@ -202,6 +210,8 @@ Read1:	call	PriChr
 	; advance sector and loop
 	call	IncSec
 	sob	R3, 10$
+	dec	R2
+	bpl	10$
 
 Done:	.print	#MsgDon
 	halt

@@ -71,10 +71,14 @@ void sendBoot ()
 void readSectors ()
 {
     unsigned int i = 0, l = 0;
+    // reading 3 bytes sectors count MSB
     ReadFile(hport, &b, 1, &dw, NULL);
-    l = b;
+    l = l | (b << 16);
     ReadFile(hport, &b, 1, &dw, NULL);
     l = l | (b << 8);
+    ReadFile(hport, &b, 1, &dw, NULL);
+    l = l | b;
+    // reading data
     f = fopen(sfname, "wb");
     printf("Opening %s to get HDD image from MS0511\n", sfname);
     while (i < l) {
@@ -119,17 +123,20 @@ void writeSectors ()
     printf("Opening %s to send HDD image to MS0511\n", sfname);
     f = fopen(sfname, "rb");
     fseek(f, 0L, SEEK_END); lo = ftell(f); fseek(f, 0L, SEEK_SET);
-    l = lo / 1024;
-    if ((lo%1024) != 0) l++;
-    printf("Sending kbs count (%u)... ", l);
+    l = lo / 512;
+    if ((lo%512) != 0) l++;
+    // send 3 bytes of sectors count MSB
+    printf("Sending sectors count (%u)... ", l);
+    b = (l & 0xFF0000) >> 16;
+    WriteFile(hport, &b, 1, &dw, NULL);
     b = (l & 0xFF00) >> 8; 
     WriteFile(hport, &b, 1, &dw, NULL);
-    b = l & 0xFF; 
+    b = l & 0xFF;
     WriteFile(hport, &b, 1, &dw, NULL);
     printf("sent\n");
+    // sending data
     while (l > 0) {
-        printf("Writing kbs -> MS0511... %u \r", l);
-        writeBlock();
+        printf("Writing sectors -> MS0511... %u \r", l);
         writeBlock();
         l--;
     }
