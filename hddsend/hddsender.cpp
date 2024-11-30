@@ -126,7 +126,7 @@ void writeSectors ()
     l = lo / 512;
     if ((lo%512) != 0) l++;
     // send 3 bytes of sectors count MSB
-    printf("Sending sectors count (%u)... ", l);
+    printf("Sending blocks count (%u)... ", l);
     b = (l & 0xFF0000) >> 16;
     WriteFile(hport, &b, 1, &dw, NULL);
     b = (l & 0xFF00) >> 8; 
@@ -136,7 +136,7 @@ void writeSectors ()
     printf("sent\n");
     // sending data
     while (l > 0) {
-        printf("Writing sectors -> MS0511... %u \r", l);
+        printf("Writing blocks -> MS0511... %u \r", l);
         writeBlock();
         l--;
     }

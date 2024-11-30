@@ -273,11 +273,12 @@ function getAudio ($tick)
         }
     }
 
-    // put pair of 177777 077776 with a size of track
-    // it's a mark for 'end of video'
-    for ($i=0; $i<SECTORS*128; $i++) { 
-        writeWord(0177777); 
-        writeWord(0077776); 
+    // put pair of video(177777,077776) with a size of track, audio must be 0xFF (0x00 inverted)
+    // it's a mark for 'end of demo'
+    for ($t=0; $t<count($timetable); $t++) {
+        $evt = $timetable[$t];
+        if ($evt[1] == T_AUDIO) { writeWord(0x00FF); continue; }
+        if ($evt[1] == T_VIDEO) { writeWord(0177777); writeWord(0077776); continue; }
     }
 
     // that's all
