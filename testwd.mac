@@ -20,6 +20,7 @@ C_SECTORS = 63.
 Start:	; boot marker and skip space (!) used by wd resident
 	nop
 	br	St200
+	.ascii	"BAAP"
 
 	.=200
 St200:	; start PPU code
@@ -139,9 +140,6 @@ BootEnd:
 	bis	#100, @#177700			; allow keyboard int
 	mov	#177, @#177103			; all LPT ports to output
 
-	; all is set then, go
-	mtps	#0
-
 	; check for new covox on 177372
 	mov	#PpInt4, @#4
 	clr	R0
@@ -151,6 +149,8 @@ BootEnd:
 	mov	#177100, CovoxPort		; audio port - LPT A
 40$:	clr	@#4
 
+	; all is set then, go
+	mtps	#0
 
 ; rendering video from start
 Render:	call	ClearScreen
@@ -162,9 +162,17 @@ Render:	call	ClearScreen
 	mov	#110014, R4			; 110014 error addr
 	mov	#^C<C_SECTORS>, -(R4)		; 110012 sectors count to read
 	mov	#^C1, -(R4)			; 110010 sector #1
-	mov	#^C0, -(R4)			; 110006 cylinder #0 low byte
-	mov	#^C0, -(R4)			; 110004 cylinder #0 high byte
-	mov	#^C241, -(R4)			; 110002 head #1
+	mov	CurTrack, R0
+	ash	#-4, R0
+	com	R0
+	mov	R0, -(R4)			; 110006 cylinder # low byte
+	swab	R0
+	mov	R0, -(R4)			; 110004 cylinder # high byte
+	mov	CurTrack, R0
+	bic	#^B1111111111110000, R0
+	bis	#^B10100000, R0
+	com	R0
+	mov	R0, -(R4)			; 110002 head #
 	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
 	call	WaitVsync
 

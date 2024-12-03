@@ -2,8 +2,10 @@
 #include <stdio.h>
 
     char sfname[1024] = "hdd.img";
-    char sport[256] = "COM3";
+    char sport[256]    = "COM3";
     unsigned int speed = 57600;
+    unsigned int track = 0;
+    unsigned int count = 0;
 
     HANDLE hport = NULL;
     DCB dcb = {};
@@ -31,6 +33,42 @@ unsigned char getMsCommand ()
 }
 
 
+// send word to RS232 as MSB
+//
+void sendWordMsb (unsigned int l)
+{
+    b = (l & 0xFF00) >> 8; 
+    WriteFile(hport, &b, 1, &dw, NULL);
+    b = l & 0xFF; 
+    WriteFile(hport, &b, 1, &dw, NULL);
+}
+
+
+// send dword as 3 bytes MSB
+//
+void sendDwordMsb (unsigned int l)
+{
+    b = (l & 0xFF0000) >> 16;
+    WriteFile(hport, &b, 1, &dw, NULL);
+    b = (l & 0xFF00) >> 8; 
+    WriteFile(hport, &b, 1, &dw, NULL);
+    b = l & 0xFF;
+    WriteFile(hport, &b, 1, &dw, NULL);
+}
+
+
+// get dword as 3-bytes MSB
+//
+unsigned int getDwordMsb ()
+{
+    unsigned int l = 0;
+    ReadFile(hport, &b, 1, &dw, NULL); l = l | (b << 16);
+    ReadFile(hport, &b, 1, &dw, NULL); l = l | (b << 8);
+    ReadFile(hport, &b, 1, &dw, NULL); l = l | b;
+    return l;
+}
+
+
 // send bootloader and main program there
 //
 void sendBoot ()
@@ -47,12 +85,9 @@ void sendBoot ()
     printf("first block of bootloader is sent\n");
     // we can send rest of bootloader then
     printf("Sending rest of bootloader, %i bytes... ", bootsize-512+2);
-    // (!) without check for errors, sending size as MSB
+    // (!) without check for errors
     unsigned long l = bootsize - 512;
-    b = (l & 0xFF00) >> 8; 
-    WriteFile(hport, &b, 1, &dw, NULL);
-    b = l & 0xFF; 
-    WriteFile(hport, &b, 1, &dw, NULL);
+    sendWordMsb(l);
     // send rest of program
     for (int i=0; i<l; i++) {
         if (!WriteFile(hport, hdboot+512+i, 1, &dw, NULL)) { 
@@ -70,19 +105,14 @@ void sendBoot ()
 //
 void readSectors ()
 {
-    unsigned int i = 0, l = 0;
-    // reading 3 bytes sectors count MSB
-    ReadFile(hport, &b, 1, &dw, NULL);
-    l = l | (b << 16);
-    ReadFile(hport, &b, 1, &dw, NULL);
-    l = l | (b << 8);
-    ReadFile(hport, &b, 1, &dw, NULL);
-    l = l | b;
+    unsigned int i = 0;
+    if (count == 0) count = 63;
+    sendDwordMsb(count);
     // reading data
     f = fopen(sfname, "wb");
     printf("Opening %s to get HDD image from MS0511\n", sfname);
-    while (i < l) {
-        printf("Reading blocks <- MS0511... %i of %i\r", i+1, l);
+    while (i < count) {
+        printf("Reading blocks <- MS0511... %i of %i\r", i+1, count);
         for (int j=0; j<512; j++) {
             ReadFile(hport, &b, 1, &dw, NULL);
             fwrite(&b, 1, 1, f);
@@ -119,26 +149,23 @@ void writeBlock ()
 //
 void writeSectors ()
 {
-    unsigned int l = 0, lo = 0;
+    unsigned int lo = 0;
     printf("Opening %s to send HDD image to MS0511\n", sfname);
     f = fopen(sfname, "rb");
     fseek(f, 0L, SEEK_END); lo = ftell(f); fseek(f, 0L, SEEK_SET);
-    l = lo / 512;
-    if ((lo%512) != 0) l++;
+    if (count == 0) {
+        count = lo / 512;
+    	if ((lo%512) != 0) count++;
+    }
     // send 3 bytes of sectors count MSB
-    printf("Sending blocks count (%u)... ", l);
-    b = (l & 0xFF0000) >> 16;
-    WriteFile(hport, &b, 1, &dw, NULL);
-    b = (l & 0xFF00) >> 8; 
-    WriteFile(hport, &b, 1, &dw, NULL);
-    b = l & 0xFF;
-    WriteFile(hport, &b, 1, &dw, NULL);
+    printf("Sending blocks count (%u)... ", count);
+    sendDwordMsb(count);
     printf("sent\n");
     // sending data
-    while (l > 0) {
-        printf("Writing blocks -> MS0511... %u \r", l);
+    while (count > 0) {
+        printf("Writing blocks -> MS0511... %u \r", count);
         writeBlock();
-        l--;
+        count--;
     }
     fclose(f);
     printf("\n");
@@ -153,21 +180,21 @@ void writeSectors ()
 void main ( int argc, char* argv[] )
 {
     // program arguments and usage info
-    if (argc < 2 || argc > 5) {
-        printf("MS0511 WD HDD image sender over RS-232\n\n");
-        printf("Usage: hddsend [hdd.img] [port] [speed]\n");
-        printf("port - default COM3\n");
-        printf("speed - default 57600\n\n");
+    if (argc < 2 || argc > 6) {
+        printf("MS0511 WD HDD image sender over RS-232\n");
+        printf("(!) assumed HDD is 63 sectors per track, 16 heads per cylinder\n");
+        printf("(!) HDD images are NOT inverted for this program\n\n");
+        printf("Usage: hddsender.exe [hdd.img] [track] [count] [port] [speed]\n");
+        printf("track [0] cylinder number << 4 | head number\n");
+        printf("count [0] sectors count to read or write, 0 means write whole file\n");
+        printf(" port [COM3] COM-port name\n");
+        printf("speed [57600] COM-port speed (100..57600)\n\n");
     }
     if (argc >= 2) strncpy(sfname, argv[1], 1023);
-    if (argc >= 3) strncpy(sport, argv[2], 255);
-    if (argc == 4) {
-        speed = atoi(argv[5]);
-        if (speed < 100 || speed > 57600) {
-            printf("(!) bad speed number, must be [100..57600]\n");
-            exit(1);
-        }
-    }
+    if (argc >= 3) track = atoi(argv[2]);
+    if (argc >= 4) count = atoi(argv[3]);
+    if (argc >= 5) strncpy(sport, argv[4], 255);
+    if (argc == 6) speed = atoi(argv[5]);
 
     // read MS0511 loader
     f = fopen("hdboot.bin", "rb");
@@ -226,6 +253,11 @@ void main ( int argc, char* argv[] )
             case 0x42: // PC -> MS0511 write image
                 writeSectors();
                 exit(0);
+            case 0x43: // send track #
+                printf("Sending track # %i ... ", track);
+                sendDwordMsb(track);
+                printf("sent\n\n");
+                break;
         }
     }
 }

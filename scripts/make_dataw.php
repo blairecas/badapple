@@ -174,7 +174,7 @@ function getAudio ($tick)
     $hname = $dir_out . 'data/bad_apple.wav';
     $h = fopen($hname, 'r');
     fseek($h, 0x30, SEEK_SET);
-    $audio = fread($h, filesize($hname)-0x30);    
+    $audio = fread($h, filesize($hname)-0x30);
     fclose($h);
     $audio_len = strlen($audio);
 

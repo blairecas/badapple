@@ -1,0 +1,161 @@
+	.title	BAPPWD
+	.mcall	.print .exit
+	.enabl	LC
+
+	.asect
+	.=1000
+
+Start:	; start PPU code
+	call	PPSen				; allocate
+	movb	#20, PPCmd
+	mov 	#PpuStart, PPAcp
+	call	PPSen				; write
+	movb	#30, PPCmd
+	call	PPSen				; run
+	; wait for maybe return
+	tst	PPComm
+	bne	.-4
+	movb	#2, PPCmd
+	call	PPSen				; release mem
+	; print error then
+	.print	#MsgErr
+	.exit
+
+PPmsg:	.word	PPArr
+        .word	177777
+PPArr:	.byte	0
+PPCmd:	.byte	1
+PPDev:	.word	32
+PPApp:	.word	0
+PPAcp:	.word	End-PpuStart/2
+PPLen:	.word	End-PpuStart/2
+
+PPSen:	mov	#PPMsg, R2
+	mov	#5, R3
+	br	20$
+10$:	movb	(R2)+, @#176676
+20$:	tstb	@#176674
+	bpl	20$
+	sob	R3, 10$
+	return
+
+PPComm:	.word	177777
+MsgErr:	.asciz	"Unable to find Bad Apple image on HDD"
+	.even
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU code
+; //////////////////////////////////////////////////////////////////////////////
+
+PpuStart:
+	mtps	#200
+	; save mem reg, replace trap 4
+	mov	@#177054, -(SP)
+	mov	@#4, -(SP)
+	mov	@#6, -(SP)
+	mov	PC, R0
+	add	#Int4-., R0
+	mov	R0, @#4
+	mov	#200, @#6
+	; test cartridges (TODO: normal IDE check, this is just presence of a cartridge test)
+	movb	#^B00000010, @#177054		; bank #1, cassette #1
+	call	CheckCart			; test write to IDE reg	
+	beq	10$				; can write 
+	movb	#^B00001010, @#177054		; bank #1, cassette #2
+	call	CheckCart			; test write to IDE reg
+	bne	99$				; nothing useful
+	; try to find our demo
+10$:	call	IncTrack
+	call	ReadWord
+	cmp	R0, #240			; nop
+	bne	90$
+	call	ReadWord
+	cmp	R0, #476			; br 200	
+	bne	90$
+	call	ReadWord
+	cmp	R0, #040502			; BA
+	bne	90$
+	call	ReadWord
+	cmp	R0, #050101			; AP
+	bne	90$
+	; found it, read and launch
+	mov	#1000, SP			; SP was at somewhere around 2000
+	call	BlackScreen
+	mov	#256.-4, R3			; skip current sector
+20$:	call	ReadWord
+	sob	R3, 20$
+	mov	#1000, R1			; read next 2 sectors to PPU addr 1000
+	mov	#512., R3
+30$:	call	ReadWord
+	mov	R0, (R1)+
+	sob	R3, 30$
+	inc	Track				; modify starting track value
+	mov	Track, @#1236
+	bis	#^B1111100000, @#177054		; allow RAM on 120000+, timers off
+	jmp	(SP)				; jump there	
+90$:	; continue cycle to ... ? 
+	cmp	Track, #10000.
+	blo	10$
+99$:	; not found
+	mov	(SP)+, @#6
+	mov	(SP)+, @#4
+	mov	(SP)+, @#177054
+	mtps	#0	
+	mov	#PPComm/2, @#177010
+	clr	@#177014
+	return
+
+Track:	.word	177777
+
+; increase track # and set to read from 2nd sector
+IncTrack:
+	inc	Track
+	mov	#110016, R5			; 110016 data port addr
+	mov	#110014, R4			; 110014 error addr
+	mov	#^C3, -(R4)			; 110012 sectors count to read
+	mov	#^C2, -(R4)			; 110010 from sector #2
+	mov	Track, R0
+	ash	#-4, R0
+	com	R0
+	mov	R0, -(R4)			; 110006 cylinder #0 low byte
+	swab	R0
+	mov	R0, -(R4)			; 110004 cylinder #0 high byte
+	mov	Track, R0
+	bic	#^B1111111111110000, R0
+	bis	#^B10100000, R0
+	com	R0
+	mov	R0, -(R4)			; 110002 head #
+	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
+	return
+
+; read one word
+ReadWord:
+	bit	#^B1000, (R4)
+	bne	.-4
+	mov	(R5), R0
+	return
+
+; trap4
+Int4:	inc	(PC)+
+Int4cn:	.word	0
+	rti
+
+; check IDE port with writing something there
+CheckCart:
+	clr	Int4cn
+	mov	#^C3, @#110012
+	tst	Int4cn
+	return
+
+; make screen black (lines table on 500)
+BlackScreen:
+	mov	#500, R0
+	clr	(R0)+
+	clr	(R0)+
+	clr	(R0)+
+	mov	#506, (R0)
+	mov	#506, @#272
+	return
+
+End:
+	.end	Start
