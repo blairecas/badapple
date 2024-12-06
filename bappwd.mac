@@ -94,7 +94,7 @@ PpuStart:
 	bis	#^B1111100000, @#177054		; allow RAM on 120000+, timers off
 	jmp	(SP)				; jump there	
 90$:	; continue cycle to ... ? 
-	cmp	Track, #10000.
+	cmp	Track, #60000.
 	blo	10$
 99$:	; not found
 	mov	(SP)+, @#6
