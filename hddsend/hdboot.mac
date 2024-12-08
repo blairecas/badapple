@@ -476,8 +476,8 @@ PpuRwp:	mov	#110016, R5			; 110016 data port addr
 	mov	R0, -(R4)			; 110002 head # (1010xxxx)
 	mov	#End/2, @#177010		; where to/from
 	mov	#256., R3			; length in words
+	tst	-(R4)
 	; check 'drive ready'
-	tstb	-(R4)
 	; tstb	(R4)
 	; bpl	.-2
 	return

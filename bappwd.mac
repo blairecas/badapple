@@ -49,6 +49,7 @@ MsgErr:	.asciz	"Unable to find Bad Apple image on HDD"
 
 PpuStart:
 	mtps	#200
+
 	; save mem reg, replace trap 4
 	mov	@#177054, -(SP)
 	mov	@#4, -(SP)
@@ -64,8 +65,10 @@ PpuStart:
 	movb	#^B00001010, @#177054		; bank #1, cassette #2
 	call	CheckCart			; test write to IDE reg
 	bne	99$				; nothing useful
+
+10$:	; TODO: check disk geometry, get max track # (and exit if not 16 heads, 63 sectors)
 	; try to find our demo
-10$:	call	IncTrack
+	call	IncTrack
 	call	ReadWord
 	cmp	R0, #240			; nop
 	bne	90$
@@ -93,7 +96,7 @@ PpuStart:
 	mov	Track, @#1236
 	bis	#^B1111100000, @#177054		; allow RAM on 120000+, timers off
 	jmp	(SP)				; jump there	
-90$:	; continue cycle to ... ? 
+90$:	; continue cycle to ... ? (max track #) 
 	cmp	Track, #60000.
 	blo	10$
 99$:	; not found
@@ -116,6 +119,7 @@ IncTrack:
 	mov	#^C2, -(R4)			; 110010 from sector #2
 	mov	Track, R0
 	ash	#-4, R0
+	bic	#^B1111000000000000, R0
 	com	R0
 	mov	R0, -(R4)			; 110006 cylinder #0 low byte
 	swab	R0
