@@ -15,8 +15,6 @@ if %ERRORLEVEL% NEQ 0 ( exit /b )
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 php -f ../scripts/lst2bin.php _bappwd.lst ./release/bappwd.sav sav
 if %ERRORLEVEL% NEQ 0 ( exit /b )
-..\scripts\rt11dsk d diska.dsk bappwd.sav >NUL
-..\scripts\rt11dsk a diska.dsk .\release\bappwd.sav >NUL
 
 rem create video data
 rem php -f ./scripts/make_dataw.php
@@ -36,5 +34,4 @@ del _bappwd.mac
 del _bappwd.lst
 
 rem run modified emulator
-cd emulator
-ukncbtl
+emulator\ukncbtl

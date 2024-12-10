@@ -36,4 +36,4 @@ del _bappmz.mac
 del _bappmz.lst
 
 echo.
-start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\badapple\bappmz.dsk /boot1
+emulator\ukncbtl
