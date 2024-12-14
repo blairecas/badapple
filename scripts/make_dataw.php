@@ -81,6 +81,8 @@ function makeTimetable ()
     addt(44); addt(20); addt(44);
     addt(50, T_AUDIO);
     addt(68);
+    addt(68); // bit #200
+    addt(20); // beq
     addt(52); // jmp Track
 }
 

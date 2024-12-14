@@ -158,6 +158,13 @@ Render:	call	ClearScreen
 	; setup first track reading
 	mov	#1, CurTrack			; 4 low bits is head #
 	clr	@#77776				; addr used for 'end of video' mark
+	; set CHS mode first of all
+	mov	CurTrack, R0
+	bic	#^B1111111111110000, R0
+	bis	#^B10100000, R0
+	com	R0
+	mov	R0, @#110002			; 110002 head #
+	; set other IDE values
 	mov	#110016, R5			; 110016 data port addr
 	mov	#110014, R4			; 110014 error addr
 	mov	#^C<C_SECTORS>, -(R4)		; 110012 sectors count to read
@@ -168,14 +175,13 @@ Render:	call	ClearScreen
 	mov	R0, -(R4)			; 110006 cylinder # low byte
 	swab	R0
 	mov	R0, -(R4)			; 110004 cylinder # high byte
-	mov	CurTrack, R0
-	bic	#^B1111111111110000, R0
-	bis	#^B10100000, R0
-	com	R0
-	mov	R0, -(R4)			; 110002 head #
+	sub	#2, R4				; 110002 CHS & head # already set
 	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
-	call	WaitVsync
+	; wait for BSY
+	bit	#^B10000000, (R4)
+	beq	.-4
 
+	call	WaitVsync
 	mov	CovoxPort, R3
 	; R3 - audio port
 	; R4 - IDE control port
@@ -185,7 +191,7 @@ Render:	call	ClearScreen
 ;
 Track:	; sectors reading
 	mov	#C_SECTORS-1, R1		; 44T
-Sector:	bit	#^B1000, (R4)			; 68T
+Sector:	bit	#^B01001000, (R4)		; 68T DRDY + DRQ
 	bne	.-4				; 20T
 	mov	#17., R2			; 44T
 10$:	mov	(R5), (R3)			; > 52T	- audio
@@ -201,7 +207,7 @@ Sector:	bit	#^B1000, (R4)			; 68T
 	mov	(R5), (R3)			; > 52T
 	sob	R1, Sector			; 40T		
 	; read last sector (not fully)
-	bit	#^B1000, (R4)			; 68T
+	bit	#^B01001000, (R4)		; 68T DRDY + DRQ
 	bne	.-4				; 20T
 	mov	#16., R2			; 44T
 20$:	mov	(R5), (R3)			; > 52T
@@ -250,6 +256,8 @@ Sector:	bit	#^B1000, (R4)			; 68T
 	mov	R0, -(R4)			; 44T	110002 head # (1010xxxx)
 	mov	(R5), (R3)			; > 52T
 	mov	#^C40, -(R4)			; 68T	110000 command 0x20 - read sectors
+	bit	#^B10000000, (R4)		; 68T	110000 wait for BSY
+	beq	.-4				; 20T
 	jmp	Track				; 52T
 
 ; //////////////////////////////////////////////////////////////////////////////
