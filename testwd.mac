@@ -11,8 +11,7 @@ C_VADDR_E = C_VADDR_O + C_SCRSIZE
 C_VTAB_O  = 73000
 C_VTAB_E  = 75400
 
-C_HEADS   = 16.
-C_SECTORS = 63.
+C_SECTORS = 50.
 
 	.asect
 	.=0
@@ -78,6 +77,13 @@ PpuStart:
 	mov	#^C0, -(R4)			; 110004 cylinder # high byte
 	mov	#^C240, -(R4)			; 110002 head # (1010xxxx)	
 	mov	#^C40, -(R4)			; 110000 command 0x20 - read sectors
+	; wait BSY
+	tstb	(R4)
+	bpl	.-2
+	; wait DRDY
+	bit	#^B01000000, (R4)
+	bne	.-4
+	; read then
 	mov	#1000, R0			; where to read
 	mov	#End-1000/2, R3			; length in words
 10$:	bit	#^B1000, (R4)			; test command port
@@ -100,7 +106,11 @@ BootEnd:
 	.asect
 	.=1000
 
-	; clear high addrs
+	br	PpuMai
+LbaSlo:	.word	50.				; data start in LBA
+LbaShi:	.word	0				;
+
+PpuMai:	; clear high addrs
 	mov	#End, R0
 	mov	#100000-End/2, R1
 	clr	(R0)+
@@ -154,33 +164,27 @@ BootEnd:
 
 ; rendering video from start
 Render:	call	ClearScreen
-
-	; setup first track reading
-	mov	#1, CurTrack			; 4 low bits is head #
+	mov	LbaSlo, LbaLow
+	mov	LbaShi, LbaHigh
 	clr	@#77776				; addr used for 'end of video' mark
-	; set CHS mode first of all
-	mov	CurTrack, R0
-	bic	#^B1111111111110000, R0
-	bis	#^B10100000, R0
-	com	R0
-	mov	R0, @#110002			; 110002 head #
-	; set other IDE values
+	mov	#^C<^xE0>, @#110002		; 110002 set LBA28 mode
 	mov	#110016, R5			; 110016 data port addr
 	mov	#110014, R4			; 110014 error addr
 	mov	#^C<C_SECTORS>, -(R4)		; 110012 sectors count to read
-	mov	#^C1, -(R4)			; 110010 sector #1
-	mov	CurTrack, R0
-	ash	#-4, R0
+	mov	LbaLow, R0
 	com	R0
-	mov	R0, -(R4)			; 110006 cylinder # low byte
+	mov	R0, -(R4)			; 110010 LBA low
 	swab	R0
-	mov	R0, -(R4)			; 110004 cylinder # high byte
-	sub	#2, R4				; 110002 CHS & head # already set
-	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
-	; wait for BSY
+	mov	R0, -(R4)			; 110006 LBA med
+	mov	LbaHigh, R0
+	com	R0
+	mov	R0, -(R4)			; 110004 LBA high
+	mov	#110000, R4
+	mov	#^C40, (R4)			; 110000 command 0x20 read sectors
+	; wait for BSY clear
 	tstb	(R4)
 	bpl	.-2
-	; wait for DRDY
+	; wait for DRDY set
 	bit	#^B01000000, (R4)
 	bne	.-4
 
@@ -230,45 +234,41 @@ Sector:	bit	#^B00001000, (R4)		; 68T DRQ
 	mov	(R5), (R3)			; > 52T
 	mov	(R5), @(R5)			; > 92T
 	; advance track (and read rest of last sector)
-	inc	CurTrack			; 80T
+	add	#C_SECTORS, LbaLow		; 104T
+	adc	LbaHigh				; 80T
+	mov	(R5), (R3)			; > 52T
+	mov	(R5), @(R5)			; > 92T
 	mov	#110014, R4			; 44T	110014 error data
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
 	mov	#^C<C_SECTORS>, -(R4)		; 68T	110012 read sectors count
-	mov	#^C1, -(R4)			; 68T	110010 sector #1
 	mov	(R5), (R3)			; > 52T
 	mov	(R5), @(R5)			; > 92T
-	mov	CurTrack, R0			; 64T	
-	mov	(R5), (R3)			; > 52T
-	asr	R0				; 20T
-	asr	R0				; 20T
-	asr	R0				; 20T
-	asr	R0				; 20T
+	mov	LbaLow, R0			; 64T
 	com	R0				; 20T
-	mov	R0, -(R4)			; 44T	110006 cylinder low byte
+	mov	R0, -(R4)			; 44T	110010 LBA low
 	mov	(R5), (R3)			; > 52T
 	mov	(R5), @(R5)			; > 92T
 	swab	R0				; 20T
-	mov	R0, -(R4)			; 44T	110004 cylinder high byte
+	mov	R0, -(R4)			; 44T	110006 LBA med
+	mov	LbaHigh, R0			; 64T
 	mov	(R5), (R3)			; > 52T
-	mov	CurTrack, R0			; 64T
-	bic	#^B1111111111110000, R0		; 44T
-	mov	(R5), (R3)			; > 52T
-	bis	#^B0000000010100000, R0		; 44T
+	mov	(R5), @(R5)			; > 92T
 	com	R0				; 20T
-	mov	R0, -(R4)			; 44T	110002 head # (1010xxxx)
+	mov	R0, -(R4)			; 44T	110004 LBA high
+	mov	#^C<^xE0>, -(R4)		; 68T	110002 LBA28 mode
 	mov	(R5), (R3)			; > 52T
-	mov	#^C40, -(R4)			; 68T	110000 command 0x20 - read sectors
+	mov	#^C40, -(R4)			; 68T	110000 command 0x20 read sectors
 	tstb	(R4)				; 44T	BSY
 	bpl	.-2				; 20T
 	jmp	Track				; 52T
+
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Data, utils
 ; //////////////////////////////////////////////////////////////////////////////
 
 CovoxPort:	.word	177372			; new covox addr
-CurTrack:	.word	0
+LbaLow:		.word	0			; current LBA low
+LbaHigh:	.word	0			; current LBA high
 
 ; int 4 for testing registers
 PpInt4:	inc	R0

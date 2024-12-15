@@ -11,7 +11,7 @@ define ('C_WIDTH', 20);
 define ('C_HEIGHT', 240);
 define ('C_MAXPOS', C_WIDTH*C_HEIGHT);
 
-define ('SECTORS', 63);
+define ('SECTORS', 50);
 define ('TRACKSIZE', SECTORS*512);
 
 define ('TICKS_IN_SEC', 6250000);
@@ -65,24 +65,19 @@ function makeTimetable ()
     addt(64); addt(20);
     // still 16 words
     addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(80); addt(44);
+    addt(104); addt(80);
     addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(68); addt(68);
+    addt(44); addt(68);    
     addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(64);
+    addt(64); addt(20); addt(44);
+    addt(50, T_AUDIO); addt(90, T_VIDEO);
+    addt(20); addt(44); addt(64);
+    addt(50, T_AUDIO); addt(90, T_VIDEO);
+    addt(20); addt(44); addt(68);
     addt(50, T_AUDIO); 
-    addt(20); addt(20); addt(20); addt(20);
-    addt(20); addt(44);
-    addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(20); addt(44);
-    addt(50, T_AUDIO);
-    addt(64); addt(44); 
-    addt(50, T_AUDIO);
-    addt(44); addt(20); addt(44);
-    addt(50, T_AUDIO);
     addt(68); // mov ^C40
     addt(44); // tstb
-    addt(20); // beq
+    addt(20); // bpl
     addt(52); // jmp Track
 }
 

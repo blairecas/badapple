@@ -5,6 +5,8 @@
 	.asect
 	.=1000
 
+C_SECTORS = 50.
+
 Start:	; start PPU code
 	call	PPSen				; allocate
 	movb	#20, PPCmd
@@ -40,7 +42,7 @@ PPSen:	mov	#PPMsg, R2
 	return
 
 PPComm:	.word	177777
-MsgErr:	.asciz	"Unable to find Bad Apple image on HDD"
+MsgErr:	.asciz	"Unable to find Bad Apple image on HDD (or read error occured)"
 	.even
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -66,9 +68,8 @@ PpuStart:
 	call	CheckCart			; test write to IDE reg
 	bne	99$				; nothing useful
 
-10$:	; TODO: check disk geometry, get max track # (and exit if not 16 heads, 63 sectors)
-	; try to find our demo
-	call	IncTrack
+10$:	call	IncTrack
+	bcs	99$				; error
 	call	ReadWord
 	cmp	R0, #240			; nop
 	bne	90$
@@ -87,17 +88,20 @@ PpuStart:
 	mov	#256.-4, R3			; skip current sector
 20$:	call	ReadWord
 	sob	R3, 20$
+	;
 	mov	#1000, R1			; read next 2 sectors to PPU addr 1000
 	mov	#512., R3
 30$:	call	ReadWord
 	mov	R0, (R1)+
 	sob	R3, 30$
-	inc	Track				; modify starting track value
-	mov	Track, @#1236
+	add	#C_SECTORS-1, LbaLow
+	adc	LbaHigh
+	mov	LbaLow, @#1002
+	mov	LbaHigh, @#1004
 	bis	#^B1111100000, @#177054		; allow RAM on 120000+, timers off
-	jmp	(SP)				; jump there	
-90$:	; continue cycle to ... ? (max track #) 
-	cmp	Track, #60000.
+	jmp	(SP)				; jump there
+90$:	; continue cycle to ... ?
+	cmp	LbaHigh, #30.
 	blo	10$
 99$:	; not found
 	mov	(SP)+, @#6
@@ -108,33 +112,49 @@ PpuStart:
 	clr	@#177014
 	return
 
-Track:	.word	177777
+LbaLow:		.word	-99.
+LbaHigh:	.word	-1
 
 ; increase track # and set to read from 2nd sector
 IncTrack:
-	inc	Track
+	add	#100., LbaLow
+	adc	LbaHigh
+	mov	#^C<^xE0>, @#110002		; 110002 master, LBA28 mode
 	mov	#110016, R5			; 110016 data port addr
 	mov	#110014, R4			; 110014 error addr
 	mov	#^C3, -(R4)			; 110012 sectors count to read
-	mov	#^C2, -(R4)			; 110010 from sector #2
-	mov	Track, R0
-	ash	#-4, R0
-	bic	#^B1111000000000000, R0
+	mov	LbaLow, R0
 	com	R0
-	mov	R0, -(R4)			; 110006 cylinder #0 low byte
+	mov	R0, -(R4)			; 110010 LBA low
 	swab	R0
-	mov	R0, -(R4)			; 110004 cylinder #0 high byte
-	mov	Track, R0
-	bic	#^B1111111111110000, R0
-	bis	#^B10100000, R0
+	mov	R0, -(R4)			; 110006 LBA med
+	mov	LbaHigh, R0
 	com	R0
-	mov	R0, -(R4)			; 110002 head #
-	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
+	mov	R0, -(R4)			; 110004 LBA high
+	mov	#110000, R4
+	mov	#^C40, (R4)			; 110000 command 0x20 read sectors
+	; wait for BSY clear
+	clr	R0
+10$:	tstb	(R4)
+	bmi	20$
+	sob	R0, 10$
+	br	90$
+20$:	; check error bit
+	bit	#1, (R4)
+	beq	90$
+	; wait for DRDY set
+	clr	R0
+30$:	bit	#^B01000000, (R4)
+	beq	40$
+	sob	R0, 30$
+	br	90$
+40$:	tst	(PC)+
+90$:	sec
 	return
 
 ; read one word
 ReadWord:
-	bit	#^B1000, (R4)
+	bit	#^B00001000, (R4)
 	bne	.-4
 	mov	(R5), R0
 	return
