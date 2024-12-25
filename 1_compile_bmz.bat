@@ -28,7 +28,7 @@ echo Make data and DSK
 echo ===========================================================================
 php -f ./scripts/make_data.php
 if %ERRORLEVEL% NEQ 0 ( exit /b )
-copy /b bappmz.bin+data.bin bappmz.dsk >NUL
+copy /b bappmz.bin+data.bin release\bappmz.dsk >NUL
 
 del bappmz.bin
 del data.bin

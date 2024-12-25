@@ -24,6 +24,8 @@ Start:	; boot marker and skip space (!) used by wd resident
 	.=200
 St200:	; start PPU code
 	mtps	#200
+	ash	#3, R0				; R0 = 0/1 (cassette #)
+	bis	R0, PpuCart
 	mov	#1000, SP
 	call	PPSen				; exec allocate
 	movb	#20, PPCmd			; 20 - write
@@ -65,31 +67,33 @@ PpuStart:
 	clr	(R0)+
 	mov	#506, (R0)
 	mov	#506, @#272			; prevent screen showing trash
-	; setup memory on addrs 100000+
-	bic	#1, @#177054			; allow 100000-117777 window
-	bis	#^B11100000, @#177054		; allow RAM on addrs 120000+
+	; setup memory map on 100000+
+PpuCart =: .+2
+	mov	#^B1111100010, @#177054		; no timers, mem map, allow 100000-117777 window, allow RAM on 120000+
 	; read sectors from 3rd ... our main code is there
 	mov	#110016, R5			; 110016 data port addr
 	mov	#110014, R4			; 110014 error code 
-	mov	#^C<End-1000/1000+1>, -(R4)	; 110012 read sectors count
-	mov	#^C3, -(R4)			; 110010 sector #3
-	mov	#^C0, -(R4)			; 110006 cylinder # low byte
-	mov	#^C0, -(R4)			; 110004 cylinder # high byte
-	mov	#^C240, -(R4)			; 110002 head # (1010xxxx)	
+	mov	#^C<End-1000/2+377/400>, -(R4)	; 110012 read sectors count
+	mov	#^C2, -(R4)			; 110010 from LBA sector #2
+	mov	#^C0, -(R4)			; 110006 LBA med
+	mov	#^C0, -(R4)			; 110004 LBA high
+	mov	#^C340, -(R4)			; 110002 0xE0 master, LBA28
 	mov	#^C40, -(R4)			; 110000 command 0x20 - read sectors
 	; wait BSY
 	tstb	(R4)
 	bpl	.-2
-	; wait DRDY
-	bit	#^B01000000, (R4)
-	bne	.-4
 	; read then
-	mov	#1000, R0			; where to read
-	mov	#End-1000/2, R3			; length in words
-10$:	bit	#^B1000, (R4)			; test command port
-	bne	10$				; not ready
-	mov	(R5), (R0)+			; get data
-	sob	R3, 10$
+	mov	#1000, R1			; where to read
+	mov	#End-1000/2+377/400, R2		; sectors count
+10$:	; wait DRDY + DRQ
+	mov	(R4), R0
+	bic	#^B1111111110110111, R0
+	bne	10$
+	; read sector
+	mov	#400, R3
+30$:	mov	(R5), (R1)+			; get data
+	sob	R3, 30$
+	sob	R2, 10$
 	; jump to main code
 	mov	#1000, SP
 	jmp	(SP)
@@ -107,7 +111,7 @@ BootEnd:
 	.=1000
 
 	br	PpuMai
-LbaSlo:	.word	50.				; data start in LBA
+LbaSlo:	.word	C_SECTORS			; data start in LBA
 LbaShi:	.word	0				;
 
 PpuMai:	; clear high addrs
@@ -167,7 +171,10 @@ Render:	call	ClearScreen
 	mov	LbaSlo, LbaLow
 	mov	LbaShi, LbaHigh
 	clr	@#77776				; addr used for 'end of video' mark
-	mov	#^C<^xE0>, @#110002		; 110002 set LBA28 mode
+	; wait for BSY=0
+	tstb	@#110000
+	bpl	.-4
+	; issue command
 	mov	#110016, R5			; 110016 data port addr
 	mov	#110014, R4			; 110014 error addr
 	mov	#^C<C_SECTORS>, -(R4)		; 110012 sectors count to read
@@ -179,14 +186,15 @@ Render:	call	ClearScreen
 	mov	LbaHigh, R0
 	com	R0
 	mov	R0, -(R4)			; 110004 LBA high
-	mov	#110000, R4
-	mov	#^C40, (R4)			; 110000 command 0x20 read sectors
-	; wait for BSY clear
+	mov	#^C340, -(R4)			; 110002 0xE0 master, LBA28
+	mov	#^C40, -(R4)			; 110000 command 0x20 read sectors
+	; wait for BSY=0
 	tstb	(R4)
 	bpl	.-2
-	; wait for DRDY set
-	bit	#^B01000000, (R4)
-	bne	.-4
+	; wait for DRDY=1 DRQ=1
+10$:	mov	(R4), R0
+	bic	#^B1111111110110111, R0
+	bne	10$
 
 	call	WaitVsync
 	mov	CovoxPort, R3
@@ -196,69 +204,78 @@ Render:	call	ClearScreen
 
 ; tracks reading cycle
 ;
-Track:	; sectors reading
+Track:	; check for the end of video
+	tst	@#77776				; 64T
+	bne	Render				; 20T
+	; sectors reading
 	mov	#C_SECTORS-1, R1		; 44T
 Sector:	bit	#^B00001000, (R4)		; 68T DRQ
 	bne	.-4				; 20T
 	mov	#17., R2			; 44T
-10$:	mov	(R5), (R3)			; > 52T	- audio
-	mov	(R5), @(R5)			; > 92T	+ video
-	mov	(R5), @(R5)			; > 92T	+ video
-	mov	(R5), (R3)			; > 52T		timings for IDE/audio port is less than RAM (8T each read/write)
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), @(R5)			; > 92T
+10$:	mov	(R5), (R3)			; -> 52T	- audio
+	mov	(R5), @(R5)			;  > 92T	+ video
+	mov	(R5), @(R5)			;  > 92T	+ video
+	mov	(R5), (R3)			; -> 52T	timings for IDE/audio port is less than RAM (8T each read/write)
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), (R3)			; -> 52T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
 	sob	R2, 10$				; 40T
-	mov	(R5), (R3)			; > 52T
+	mov	(R5), (R3)			; -> 52T
 	sob	R1, Sector			; 40T		
 	; read last sector (not fully)
 	bit	#^B00001000, (R4)		; 68T DRQ
 	bne	.-4				; 20T
 	mov	#16., R2			; 44T
-20$:	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
-	mov	(R5), @(R5)			; > 92T
+20$:	mov	(R5), (R3)			; -> 52T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), (R3)			; -> 52T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), (R3)			; -> 52T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
 	sob	R2, 20$				; 40T
-	; check for the end of video
-	tst	@#77776				; 64T
-	bne	Render				; 20T
 	; (!) still have 16 words to read
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
-	; advance track (and read rest of last sector)
+	mov	(R5), (R3)			; -> 52T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), (R3)			; -> 52T
+	mov	(R5), @(R5)			;  > 92T
+	mov	(R5), @(R5)			;  > 92T
+	mov	#AudiBuf, R1			; 44T	fill small audio buf
+	mov	(R5), (R3)			; -> 52T
+	mov	(R5), (R1)+			; > 60T
+	mov	(R5), (R1)+			; > 60T
+	mov	(R5), (R1)+			; > 60T
+	mov	(R5), (R1)+			; > 60T
+	mov	(R5), (R1)+			; > 60T	... :( big gap in audio out
+	; all C_SECTORS were readed now
+	mov	#AudiBuf, R1			; 44T	output small audio buf
+	mov	(R1)+, (R3)			; -60T
+	; advance track
 	add	#C_SECTORS, LbaLow		; 104T
 	adc	LbaHigh				; 80T
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
+	mov	(R1)+, (R3)			; -60T
 	mov	#110014, R4			; 44T	110014 error data
 	mov	#^C<C_SECTORS>, -(R4)		; 68T	110012 read sectors count
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
 	mov	LbaLow, R0			; 64T
 	com	R0				; 20T
 	mov	R0, -(R4)			; 44T	110010 LBA low
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
+	mov	(R1)+, (R3)			; -60T
 	swab	R0				; 20T
 	mov	R0, -(R4)			; 44T	110006 LBA med
 	mov	LbaHigh, R0			; 64T
-	mov	(R5), (R3)			; > 52T
-	mov	(R5), @(R5)			; > 92T
 	com	R0				; 20T
 	mov	R0, -(R4)			; 44T	110004 LBA high
-	mov	#^C<^xE0>, -(R4)		; 68T	110002 LBA28 mode
-	mov	(R5), (R3)			; > 52T
+	mov	(R1)+, (R3)			; -60T
+	mov	#^C340, -(R4)			; 68T	110002 0xE0 master, LBA28 mode
 	mov	#^C40, -(R4)			; 68T	110000 command 0x20 read sectors
 	tstb	(R4)				; 44T	BSY
 	bpl	.-2				; 20T
+	mov	(R1)+, (R3)			; -60T
 	jmp	Track				; 52T
 
 
@@ -269,6 +286,7 @@ Sector:	bit	#^B00001000, (R4)		; 68T DRQ
 CovoxPort:	.word	177372			; new covox addr
 LbaLow:		.word	0			; current LBA low
 LbaHigh:	.word	0			; current LBA high
+AudiBuf:	.blkw	10
 
 ; int 4 for testing registers
 PpInt4:	inc	R0

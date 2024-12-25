@@ -31,7 +31,7 @@ del _testwd.bin
 del _testwd.mac
 rem del _testwd.lst
 del _bappwd.mac
-del _bappwd.lst
+rem del _bappwd.lst
 
 rem run modified emulator
 emulator\ukncbtl

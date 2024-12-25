@@ -51,60 +51,38 @@ MsgErr:	.asciz	"Unable to find Bad Apple image on HDD (or read error occured)"
 
 PpuStart:
 	mtps	#200
-
 	; save mem reg, replace trap 4
 	mov	@#177054, -(SP)
 	mov	@#4, -(SP)
-	mov	@#6, -(SP)
 	mov	PC, R0
 	add	#Int4-., R0
 	mov	R0, @#4
-	mov	#200, @#6
 	; test cartridges (TODO: normal IDE check, this is just presence of a cartridge test)
 	movb	#^B00000010, @#177054		; bank #1, cassette #1
 	call	CheckCart			; test write to IDE reg	
 	beq	10$				; can write 
 	movb	#^B00001010, @#177054		; bank #1, cassette #2
 	call	CheckCart			; test write to IDE reg
-	bne	99$				; nothing useful
-
-10$:	call	IncTrack
-	bcs	99$				; error
-	call	ReadWord
-	cmp	R0, #240			; nop
-	bne	90$
-	call	ReadWord
-	cmp	R0, #476			; br 200	
-	bne	90$
-	call	ReadWord
-	cmp	R0, #040502			; BA
-	bne	90$
-	call	ReadWord
-	cmp	R0, #050101			; AP
-	bne	90$
-	; found it, read and launch
-	mov	#1000, SP			; SP was at somewhere around 2000
-	call	BlackScreen
-	mov	#256.-4, R3			; skip current sector
-20$:	call	ReadWord
-	sob	R3, 20$
-	;
-	mov	#1000, R1			; read next 2 sectors to PPU addr 1000
-	mov	#512., R3
-30$:	call	ReadWord
-	mov	R0, (R1)+
-	sob	R3, 30$
-	add	#C_SECTORS-1, LbaLow
+	bne	90$				; nothing useful
+10$:	; read sector 0
+	mov	PC, R1
+	add	#Buffer-., R1
+	call	ReadSector
+	inc	LbaLow
+	call	CheckSign
+	beq	StartDemo
+	; skip all partitions
+	mov	PC, R5
+	add	#Buffer+2-., R5			; addr of partition sizes table
+	mov	#24., R4			; 24. max partitions + one after them
+20$:	add	(R5)+, LbaLow
 	adc	LbaHigh
-	mov	LbaLow, @#1002
-	mov	LbaHigh, @#1004
-	bis	#^B1111100000, @#177054		; allow RAM on 120000+, timers off
-	jmp	(SP)				; jump there
-90$:	; continue cycle to ... ?
-	cmp	LbaHigh, #30.
-	blo	10$
-99$:	; not found
-	mov	(SP)+, @#6
+	sob	R4, 20$
+	inc	LbaLow
+	adc	LbaHigh
+	call	CheckSign
+	beq	StartDemo
+90$:	; not found
 	mov	(SP)+, @#4
 	mov	(SP)+, @#177054
 	mtps	#0	
@@ -112,52 +90,28 @@ PpuStart:
 	clr	@#177014
 	return
 
-LbaLow:		.word	-99.
-LbaHigh:	.word	-1
-
-; increase track # and set to read from 2nd sector
-IncTrack:
-	add	#100., LbaLow
+; demo is found, read 2 sectors to 1000 and go
+StartDemo:
+	mov	#1000, SP			; SP was at somewhere around 2000
+	call	BlackScreen
+	mov	LbaLow, R5			; LBA now at demo boot sector
+	mov	LbaHigh, R4
+	add	#C_SECTORS-1, R5		; LBA of demo data sector
+	adc	R4
+	; read 2 sectors of demo code
+	inc	LbaLow
 	adc	LbaHigh
-	mov	#^C<^xE0>, @#110002		; 110002 master, LBA28 mode
-	mov	#110016, R5			; 110016 data port addr
-	mov	#110014, R4			; 110014 error addr
-	mov	#^C3, -(R4)			; 110012 sectors count to read
-	mov	LbaLow, R0
-	com	R0
-	mov	R0, -(R4)			; 110010 LBA low
-	swab	R0
-	mov	R0, -(R4)			; 110006 LBA med
-	mov	LbaHigh, R0
-	com	R0
-	mov	R0, -(R4)			; 110004 LBA high
-	mov	#110000, R4
-	mov	#^C40, (R4)			; 110000 command 0x20 read sectors
-	; wait for BSY clear
-	clr	R0
-10$:	tstb	(R4)
-	bmi	20$
-	sob	R0, 10$
-	br	90$
-20$:	; check error bit
-	bit	#1, (R4)
-	beq	90$
-	; wait for DRDY set
-	clr	R0
-30$:	bit	#^B01000000, (R4)
-	beq	40$
-	sob	R0, 30$
-	br	90$
-40$:	tst	(PC)+
-90$:	sec
-	return
-
-; read one word
-ReadWord:
-	bit	#^B00001000, (R4)
-	bne	.-4
-	mov	(R5), R0
-	return
+	mov	#1000, R1
+	call	ReadSector
+	inc	LbaLow
+	adc	LbaHigh
+	mov	#2000, R1
+	call	ReadSector
+	; correct value of LBA for data and start
+	mov	R4, @#1004			; demo data start high
+	mov	R5, @#1002			; demo data start low
+	bis	#^B1111100000, @#177054		; allow RAM on 120000+, timers off
+	jmp	(SP)				; jump there
 
 ; trap4
 Int4:	inc	(PC)+
@@ -167,7 +121,7 @@ Int4cn:	.word	0
 ; check IDE port with writing something there
 CheckCart:
 	clr	Int4cn
-	mov	#^C3, @#110012
+	mov	#^C1, @#110012
 	tst	Int4cn
 	return
 
@@ -180,6 +134,65 @@ BlackScreen:
 	mov	#506, (R0)
 	mov	#506, @#272
 	return
+
+; read sector and check signature of bad apple
+CheckSign:
+	mov	PC, R1
+	add	#Buffer+1000-., R1
+	mov	R1, -(SP)
+	call	ReadSector
+	mov	(SP)+, R0
+	cmp	#240, (R0)+			; NOP
+	bne	99$
+	cmp	#476, (R0)+			; BR
+	bne	99$
+	cmp	#040502, (R0)+			; 'BA'
+	bne	99$
+	cmp	#050101, (R0)+			; 'AP'
+99$:	return
+
+; read sector from HDD
+; addr - LbaHigh, LbaLow
+; R1 - where to
+ReadSector:
+	mov	R5, -(SP)
+	mov	R4, -(SP)
+	; wait BSY
+	tstb	@#110000
+	bpl	.-4
+	; issue command
+	mov	#110016, R5			; 110016 data port addr
+	mov	#110014, R4			; 110014 error code
+	mov	#^C1, -(R4)			; 110012 read sectors count
+	mov	LbaLow, R0
+	com	R0
+	mov	R0, -(R4)			; 110010 LBA low
+	swab	R0
+	mov	R0, -(R4)			; 110006 LBA med
+	mov	LbaHigh, R0
+	com	R0
+	mov	R0, -(R4)			; 110004 LBA high
+	mov	#^C340, -(R4)			; 110002 0xE0 master, LBA28
+	mov	#^C40, -(R4)			; 110000 command 0x20 - read sectors
+	; wait BSY
+	tstb	(R4)
+	bpl	.-2
+	; not checking ERR, screw it
+20$:	; wait DRDY + DRQ
+	mov	(R4), R0
+	bic	#^B1111111110110111, R0
+	bne	20$
+	; read sector
+	mov	#400, R3
+30$:	mov	(R5), (R1)+			; get data
+	sob	R3, 30$
+	mov	(SP)+, R4
+	mov	(SP)+, R5
+	return
+
+LbaLow:		.word	0
+LbaHigh:	.word	0
+Buffer:		.blkw	1000			; 2 sectors
 
 End:
 	.end	Start

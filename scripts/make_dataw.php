@@ -41,7 +41,8 @@ function addt ($t, $x = T_NONE)
 // makes one track time table
 function makeTimetable ()
 {
-    addt(44);
+    addt(64); addt(20); // tst bne_render
+    addt(44); // mov sectors-1
     for ($r1=0; $r1<SECTORS-1; $r1++)
     {
         addt(68); addt(20); addt(44);
@@ -62,23 +63,25 @@ function makeTimetable ()
         addt(50, T_AUDIO); addt(90, T_VIDEO); addt(90, T_VIDEO);
         addt(40); // sob r2, 20$
     }
-    addt(64); addt(20);
     // still 16 words
-    addt(50, T_AUDIO); addt(90, T_VIDEO);
+    addt(50, T_AUDIO); addt(90, T_VIDEO); addt(90, T_VIDEO);
+    addt(50, T_AUDIO); addt(90, T_VIDEO); addt(90, T_VIDEO);
+    addt(44); 
+    addt(50, T_AUDIO);
+    // reading audio buf, buf output will be later
+    addt(60); addt(60); addt(60); addt(60); addt(60);
+    // all sectors readed
+    addt(44);
+    addt(60, T_AUDIO); // delayed audio out
     addt(104); addt(80);
-    addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(44); addt(68);    
-    addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(64); addt(20); addt(44);
-    addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(20); addt(44); addt(64);
-    addt(50, T_AUDIO); addt(90, T_VIDEO);
-    addt(20); addt(44); addt(68);
-    addt(50, T_AUDIO); 
-    addt(68); // mov ^C40
-    addt(44); // tstb
-    addt(20); // bpl
-    addt(52); // jmp Track
+    addt(60, T_AUDIO); // delayed audio out
+    addt(44); addt(68); addt(64); addt(20); addt(44);
+    addt(60, T_AUDIO); // delayed audio out
+    addt(20); addt(44); addt(64); addt(20); addt(44); 
+    addt(60, T_AUDIO); // delayed audio out
+    addt(68); addt(68); addt(44); addt(20);
+    addt(60, T_AUDIO); // delayed audio out
+    addt(52); // jmp track
 }
 
 // write word to output and increase size variable
