@@ -17,6 +17,7 @@ Take other files from /emulator folder if you want, though they aren't modified.
 <br />Attach ide_wdromv0110.bin as cartridge ROM and bappwd.img as disk image. Boot MS0511 from option 2.
 <br />If you want to keep RT-11 partitions - write bappwd.img on HDD right after them. For instance - you have 8 RT-11 partitions with 65535 blocks size each. 8*65535+1 (one for zero sector) = 524281. Write bappwd.img from that sector. Then use [bappwd.sav](/release/bappwd.sav?raw=true) launcher from RT-11.
 <br /> 
+<br />Hard drive demo video: [bappwd_1.mp4](/screenshots/bappwd_1.mp4?raw=true)
+<br />
 <br />Floppy version picture
 <br />![Screenshot 1](/screenshots/bappmz_1.png?raw=true)
-<br />Hard drive demo video: [bappwd_1.mp4](/screenshots/bappwd_1.mp4?raw=true)
