@@ -19,3 +19,4 @@ Take other files from /emulator folder if you want, though they aren't modified.
 <br /> 
 <br />Floppy version picture
 <br />![Screenshot 1](/screenshots/bappmz_1.png?raw=true)
+<br />Hard drive demo video: [bappwd_1.mp4](/screenshots/bappwd_1.mp4?raw=true)
