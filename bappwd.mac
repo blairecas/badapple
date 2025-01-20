@@ -99,11 +99,11 @@ StartDemo:
 	add	#C_SECTORS-1, R5		; LBA of demo data sector
 	adc	R4
 	; read 2 sectors of demo code
-	inc	LbaLow
+	add	#1, LbaLow
 	adc	LbaHigh
 	mov	#1000, R1
 	call	ReadSector
-	inc	LbaLow
+	add	#1, LbaLow
 	adc	LbaHigh
 	mov	#2000, R1
 	call	ReadSector
