@@ -72,14 +72,13 @@ PpuStart:
 	call	CheckSign
 	beq	StartDemo
 	; skip all partitions
+	inc	LbaLow
 	mov	PC, R5
 	add	#Buffer+2-., R5			; addr of partition sizes table
 	mov	#24., R4			; 24. max partitions + one after them
 20$:	add	(R5)+, LbaLow
 	adc	LbaHigh
 	sob	R4, 20$
-	add	#1, LbaLow
-	adc	LbaHigh
 	call	CheckSign
 	beq	StartDemo
 90$:	; not found
