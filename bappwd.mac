@@ -78,7 +78,7 @@ PpuStart:
 20$:	add	(R5)+, LbaLow
 	adc	LbaHigh
 	sob	R4, 20$
-	inc	LbaLow
+	add	#1, LbaLow
 	adc	LbaHigh
 	call	CheckSign
 	beq	StartDemo
